@@ -57,12 +57,12 @@ def convert_files_to_excel(file_list):
         for file in file_list:
             if file.endswith('.lis'):
                 df = pd.read_csv(file, sep='|', engine='python', encoding='latin1')
-              for i in df.columns:
-                if 'fecha' in i:
-                    try:
-                      df[i]=pd.to_datetime(df[i],format='%b %d %Y %I:%M:%S:%f%p')
-                    except:
-                      pass
+                for i in df.columns:
+                    if 'fecha' in i:
+                        try:
+                            df[i]=pd.to_datetime(df[i],format='%b %d %Y %I:%M:%S:%f%p')
+                        except:
+                            pass
             elif file.endswith('.xml'):
                 df = xml_to_excel(file)
             else:
