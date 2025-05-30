@@ -1,84 +1,80 @@
 import pandas as pd
 import io
+from googleapiclient.http import MediaIoBaseUpload
 
-def xml_to_excel(file_content):
+def xml_to_excel_bytes(xml_text):
     """
-    Convierte el contenido de un archivo XML a DataFrame combinando metadatos y registros.
-
-    Args:
-        file_content (str): Contenido del XML en texto.
-
-    Returns:
-        pd.DataFrame: DataFrame combinado.
+    Convierte texto XML a bytes de archivo Excel (.xlsx).
     """
-    decoded = file_content.decode('utf-8')
-    meta = pd.read_xml(io.StringIO(decoded))
-    df = pd.read_xml(io.StringIO(decoded), xpath='.//Registro')
-
+    meta = pd.read_xml(io.StringIO(xml_text))
+    df = pd.read_xml(io.StringIO(xml_text), xpath='.//Registro')
     meta = meta.iloc[[0]]
     meta = meta.loc[meta.index.repeat(len(df))].reset_index(drop=True)
     df = pd.concat([meta, df.reset_index(drop=True)], axis=1)
-    return df
 
-def convert_files_in_drive_folder(drive, folder_id):
+    output = io.BytesIO()
+    df.to_excel(output, index=False)
+    output.seek(0)
+    return output
+
+def convert_files_in_drive_folder(service, folder_id):
     """
-    Convierte todos los archivos .lis y .xml de una carpeta de Google Drive a .xlsx.
-    Los archivos convertidos se suben en la misma carpeta.
-    Los originales se eliminan.
+    Descarga archivos .lis/.xml desde Drive, convierte a .xlsx,
+    sube el resultado y elimina el archivo original.
 
     Args:
-        drive (GoogleDrive): Objeto autenticado con PyDrive2.
-        folder_id (str): ID de la carpeta en Google Drive.
+        service: Google Drive API service.
+        folder_id: ID de la carpeta compartida.
 
     Returns:
-        str: Mensaje con la cantidad de archivos procesados o error.
+        str: Resultado de la operación.
     """
-    file_list = drive.ListFile({
-        'q': f"'{folder_id}' in parents and trashed=false"
-    }).GetList()
+    response = service.files().list(
+        q=f"'{folder_id}' in parents and trashed=false",
+        fields="files(id, name, mimeType)"
+    ).execute()
 
-    if not file_list:
-        return "⚠️ No se encontraron archivos .lis o .xml en la carpeta."
+    archivos = response.get('files', [])
+    if not archivos:
+        return "⚠️ No se encontraron archivos."
 
     total = 0
+    for archivo in archivos:
+        file_id = archivo['id']
+        name = archivo['name']
 
-    for file in file_list:
-        filename = file['title']
-        if not (filename.endswith('.xml') or filename.endswith('.lis')):
-            continue  # saltar archivos no soportados
+        if not (name.endswith('.xml') or name.endswith('.lis')):
+            continue
 
+        file_content = service.files().get_media(fileId=file_id).execute()
         try:
-            content = file.GetContentString(encoding='utf-8')
-
-            if filename.endswith('.lis'):
-                df = pd.read_csv(io.StringIO(content), sep='|', engine='python', encoding='latin1')
-                for i in df.columns:
-                    try:
+            if name.endswith('.xml'):
+                excel_bytes = xml_to_excel_bytes(file_content.decode('utf-8'))
+            else:
+                df = pd.read_csv(io.StringIO(file_content.decode('latin1')), sep='|', engine='python')
+                try:
+                    for i in df.columns:
                         if 'fecha' in i:
                             df[i]=pd.to_datetime(df[i],format='%b %d %Y %I:%M:%S:%f%p')
-                    except:pass
-            else:  # XML
-                df = xml_to_excel(content)
+                except:pass
+                excel_bytes = io.BytesIO()
+                df.to_excel(excel_bytes, index=False)
+                excel_bytes.seek(0)
 
-            # Convertir DataFrame a Excel en memoria
-            output = io.BytesIO()
-            df.to_excel(output, index=False, engine='openpyxl')
-            output.seek(0)
+            # Subir el Excel
+            excel_name = name.rsplit('.', 1)[0] + '.xlsx'
+            media = MediaIoBaseUpload(excel_bytes, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            service.files().create(
+                body={'name': excel_name, 'parents': [folder_id]},
+                media_body=media,
+                fields='id'
+            ).execute()
 
-            # Subir a Drive como .xlsx
-            new_file = drive.CreateFile({
-                'title': filename.rsplit('.', 1)[0] + '.xlsx',
-                'parents': [{'id': folder_id}]
-            })
-            new_file.SetContentString(output.read().decode('ISO-8859-1'), encoding='ISO-8859-1')
-            new_file.Upload()
-
-            # Eliminar original
-            file.Delete()
-
+            # Borrar original
+            service.files().delete(fileId=file_id).execute()
             total += 1
 
         except Exception as e:
-            print(f"❌ Error procesando {filename}: {e}")
+            print(f"❌ Error con {name}: {e}")
 
-    return f"✅ Se convirtieron {total} archivo(s) .lis / .xml a .xlsx y se subieron al mismo folder."
+    return f"✅ Se convirtieron {total} archivo(s) y se subieron como .xlsx"
