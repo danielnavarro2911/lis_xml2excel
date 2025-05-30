@@ -1,35 +1,9 @@
 import pandas as pd
 import os
-import zipfile
-
-def save_uploaded_files(uploaded_files):
-    """
-    Guarda todos los archivos subidos.
-
-    Args:
-        uploaded_files (dict): Diccionario con los archivos cargados.
-
-    Returns:
-        List[str]: Lista de nombres de archivos guardados.
-    """
-    saved_files = []
-    for file_info in uploaded_files.values():
-        filename = file_info['metadata']['name']
-        content = file_info['content']
-        with open(filename, 'wb') as f:
-            f.write(content)
-        saved_files.append(filename)
-    return saved_files
 
 def xml_to_excel(file):
     """
-    Convierte un XML según el formato especial del usuario.
-
-    Args:
-        file (str): Ruta del archivo XML.
-
-    Returns:
-        pd.DataFrame: DataFrame combinado con metadata.
+    Convierte un archivo XML que tiene metadatos y registros.
     """
     with open(file, 'r', encoding='utf-8') as f:
         meta = pd.read_xml(f)
@@ -41,54 +15,37 @@ def xml_to_excel(file):
     df = pd.concat([meta, df.reset_index(drop=True)], axis=1)
     return df
 
-def convert_files_to_excel(file_list):
+def convert_drive_folder(folder_path):
     """
-    Convierte múltiples archivos a Excel.
-
-    Args:
-        file_list (List[str]): Archivos a convertir.
-
-    Returns:
-        List[str]: Archivos .xlsx generados.
-        str or None: Mensaje de error si ocurre alguno.
+    Convierte todos los archivos .lis y .xml en una carpeta a .xlsx,
+    los guarda en la misma carpeta y elimina los originales.
     """
-    excel_files = []
+    files = [f for f in os.listdir(folder_path) if f.endswith('.lis') or f.endswith('.xml')]
+    if not files:
+        return "No se encontraron archivos .lis ni .xml."
+
     try:
-        for file in file_list:
+        for file in files:
+            full_path = os.path.join(folder_path, file)
+
             if file.endswith('.lis'):
-                df = pd.read_csv(file, sep='|', engine='python', encoding='latin1')
+                df = pd.read_csv(full_path, sep='|', engine='python', encoding='latin1')
                 for i in df.columns:
-                    if 'fecha' in i:
-                        try:
+                    try:
+                        if 'fecha' in i:
                             df[i]=pd.to_datetime(df[i],format='%b %d %Y %I:%M:%S:%f%p')
-                        except:
-                            pass
+                    except:pass
             elif file.endswith('.xml'):
-                df = xml_to_excel(file)
+                df = xml_to_excel(full_path)
             else:
-                return [], f"Tipo de archivo no soportado: {file}"
+                continue  # se ignora
 
-            output_name = file.rsplit('.', 1)[0] + '.xlsx'
+            output_name = os.path.join(folder_path, file.rsplit('.', 1)[0] + '.xlsx')
             df.to_excel(output_name, index=False)
-            excel_files.append(output_name)
 
-        return excel_files, None
+            os.remove(full_path)  # borra el original
+
+        return f"✅ {len(files)} archivo(s) convertidos y guardados en la carpeta."
 
     except Exception as e:
-        return [], str(e)
-
-def zip_files(file_list, zip_name='archivos_convertidos.zip'):
-    """
-    Crea un ZIP con los archivos dados.
-
-    Args:
-        file_list (List[str]): Archivos a comprimir.
-        zip_name (str): Nombre del archivo ZIP.
-
-    Returns:
-        str: Nombre del archivo ZIP creado.
-    """
-    with zipfile.ZipFile(zip_name, 'w') as zipf:
-        for file in file_list:
-            zipf.write(file)
-    return zip_name
+        return f"❌ Error durante la conversión: {e}"
