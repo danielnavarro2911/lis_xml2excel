@@ -71,7 +71,7 @@ def convert_files_in_drive_folder(service, folder_id):
             ).execute()
 
             # Borrar original
-            service.files().delete(fileId=file_id).execute()
+            #service.files().delete(fileId=file_id).execute()
             total += 1
 
         except Exception as e:
