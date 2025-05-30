@@ -1,28 +1,30 @@
+
 import json
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 from google.colab import userdata
 
-def authenticate_from_colab_secret(secret_name='credenciales', temp_file='sa_key.json'):
+def authenticate_from_colab_secret(secret_name='credenciales'):
     """
-    Carga la clave JSON desde los secretos de Colab, la guarda como archivo
-    temporal y autentica con Google Drive usando PyDrive2.
+    Autentica con Google Drive usando un secreto guardado en Google Colab.
+    El secreto debe ser el JSON de una cuenta de servicio (como string).
 
     Args:
-        secret_name (str): Nombre del secreto en Colab.
-        temp_file (str): Nombre del archivo temporal que se usará.
+        secret_name (str): Nombre del secreto en Colab (ej. 'credenciales').
 
     Returns:
-        GoogleDrive: Objeto autenticado.
+        GoogleDrive: Objeto autenticado para operaciones con Drive.
     """
     secret_json = userdata.get(secret_name)
     if not secret_json:
         raise ValueError(f"No se encontró el secreto llamado '{secret_name}'.")
 
-    with open(temp_file, 'w') as f:
-        json.dump(json.loads(secret_json), f)
+    # Convertimos string JSON a diccionario
+    service_account_info = json.loads(secret_json)
 
+    # Creamos el archivo temporal para pasárselo a ServiceAuth
     gauth = GoogleAuth()
-    gauth.LoadServiceConfigFile(temp_file)
-    gauth.ServiceAuth()
-    return GoogleDrive(gauth)
+    gauth.ServiceAuth(service_account_info)
+
+    drive = GoogleDrive(gauth)
+    return drive
