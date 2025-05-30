@@ -1,33 +1,28 @@
-import json
-from pydrive2.auth import GoogleAuth
-from pydrive2.drive import GoogleDrive
 from google.colab import userdata
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+import json
 
-def authenticate_from_colab_secret(secret_name='credenciales', json_path='sa_key.json'):
+def build_drive_service_from_colab_secret(secret_name='credenciales', scopes=None):
     """
-    Autentica con Google Drive usando un secreto de Colab que contiene el JSON
-    de una cuenta de servicio. El archivo se guarda como sa_key.json.
+    Construye un servicio de Google Drive desde un secreto JSON guardado en Colab.
 
     Args:
-        secret_name (str): Nombre del secreto en Colab.
-        json_path (str): Archivo temporal donde se guardará el JSON.
+        secret_name (str): Nombre del secreto que contiene el JSON.
+        scopes (list): Scopes requeridos para el acceso a Drive.
 
     Returns:
-        GoogleDrive: Objeto autenticado con PyDrive2.
+        googleapiclient.discovery.Resource: Objeto drive autenticado.
     """
-    # Obtener el JSON desde el secreto
+    if scopes is None:
+        scopes = ['https://www.googleapis.com/auth/drive']
+
     secret_json = userdata.get(secret_name)
     if not secret_json:
-        raise ValueError(f"⚠️ No se encontró el secreto llamado '{secret_name}'.")
+        raise ValueError(f"⚠️ Secreto '{secret_name}' no encontrado.")
 
-    # Guardar como archivo para usarlo con ServiceAuth
-    with open(json_path, 'w') as f:
-        json.dump(json.loads(secret_json), f)
+    info = json.loads(secret_json)
+    credentials = service_account.Credentials.from_service_account_info(info, scopes=scopes)
 
-    # Autenticación con cuenta de servicio
-    gauth = GoogleAuth()
-    gauth.settings['client_config_file'] = json_path
-    gauth.ServiceAuth()
-
-    drive = GoogleDrive(gauth)
-    return drive
+    service = build('drive', 'v3', credentials=credentials)
+    return service
