@@ -1,7 +1,7 @@
 from google.colab import files
 import ipywidgets as widgets
 from IPython.display import display, clear_output
-from converter import save_uploaded_files, convert_files_to_excel, zip_files
+from lis_xml2excel.converter import save_uploaded_files, convert_files_to_excel, zip_files
 
 def render_interface():
     upload_button = widgets.FileUpload(
