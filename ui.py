@@ -1,7 +1,7 @@
 import ipywidgets as widgets
 from IPython.display import display, clear_output
-from converter import convert_files_in_drive_folder
-from utils import authenticate_from_colab_secret
+from lis_xml2excel.converter import convert_files_in_drive_folder
+from lis_xml2excel.utils import authenticate_from_colab_secret
 
 def render_interface_from_colab_secret(folder_id):
     """
